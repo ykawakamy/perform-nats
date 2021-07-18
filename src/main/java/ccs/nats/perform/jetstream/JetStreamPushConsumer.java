@@ -13,9 +13,11 @@ import ccs.perform.util.SequencialPerformCounter;
 import io.nats.client.Connection;
 import io.nats.client.Dispatcher;
 import io.nats.client.JetStream;
+import io.nats.client.JetStreamOptions;
 import io.nats.client.JetStreamSubscription;
 import io.nats.client.MessageHandler;
 import io.nats.client.Nats;
+import io.nats.client.Options;
 
 public class JetStreamPushConsumer {
     /** ロガー */
@@ -33,27 +35,32 @@ public class JetStreamPushConsumer {
         SequencialPerformCounter pc = new SequencialPerformCounter();
 
         LatencyMeasurePingDeserializer serializer = new LatencyMeasurePingDeserializer();
+        
+		Options options = new Options.Builder()
+				.server(CommonProperties.get("ccs.nats.url", "nats://localhost:4222"))
+				.build();
 
-        Connection nc = Nats.connect(CommonProperties.get("ccs.nats.url", "nats://localhost:4222"));
-        JetStream jetStream = nc.jetStream();
+        
 
-        Dispatcher dispatcher = nc.createDispatcher();
-        MessageHandler handlar = (msg)->{
-            byte[] data = msg != null ? msg.getData() : null;
-            if (data != null) {
-                LatencyMeasurePing ping = serializer.deserialize("", data);
-                pc.perform(ping.getSeq());
-                long latency = ping.getLatency();
-                pc.addLatency(latency);
-                hist.increament(latency);
-            }
-            msg.ack();
-        };
+        try(Connection nc = Nats.connect(options)) {
+            JetStreamOptions opt = JetStreamOptions.builder().build();
+    		JetStream jetStream = nc.jetStream(opt );
 
-        JetStreamSubscription sub = jetStream.subscribe(topic, dispatcher, handlar, true);
-        try {
-            // トピックを指定してメッセージを送信する
+            Dispatcher dispatcher = nc.createDispatcher();
+            MessageHandler handlar = (msg)->{
+                byte[] data = msg != null ? msg.getData() : null;
+                if (data != null) {
+                    LatencyMeasurePing ping = serializer.deserialize("", data);
+                    pc.perform(ping.getSeq());
+                    long latency = ping.getLatency();
+                    pc.addLatency(latency);
+                    hist.increament(latency);
+                }
+                msg.ack();
+            };
 
+            JetStreamSubscription sub = jetStream.subscribe(topic, dispatcher, handlar, true);
+            
             for( int i=0 ; i != iter ; i++ ) {
                 long st = System.nanoTime();
                 long et = 0;
@@ -64,12 +71,10 @@ public class JetStreamPushConsumer {
                 }
 
                 PerformSnapshot snap = pc.reset();
-                log.info("{}: {} op, {} errors, {} ns/op, latency: {} ms/op", key, snap.getPerform(), snap.getErr(), snap.getElapsedPerOperation(et-st), snap.getLatencyPerOperation() );
+                snap.print(log, et-st);
             }
         } catch( Throwable th ) {
             th.printStackTrace();
-        } finally {
-            nc.close();
         }
     }
 
