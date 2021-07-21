@@ -23,8 +23,6 @@ public class NatsConsumer {
 
     public static void main(String[] args) throws Exception {
         String topic = System.getProperty("ccs.perform.topic", "test");
-        String groupid = System.getProperty("ccs.perform.groupid", "defaultgroup");
-        String key = System.getProperty("ccs.perform.key", "defaultkey");
         long loop_ns = 5_000_000_000L; // ns = 5s
         int iter = Integer.valueOf(System.getProperty("ccs.perform.iterate", "20"));
 

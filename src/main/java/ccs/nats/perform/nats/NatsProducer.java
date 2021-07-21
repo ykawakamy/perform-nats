@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import ccs.nats.data.LatencyMeasurePing;
 import ccs.nats.data.LatencyMeasurePingSerializer;
 import ccs.perform.util.CommonProperties;
+import ccs.perform.util.TopicNameSupplier;
 import io.nats.client.Connection;
 import io.nats.client.Nats;
 
@@ -20,15 +21,17 @@ public class NatsProducer {
 
     public static void main(String[] asArgs) throws Exception {
         String topic = System.getProperty("ccs.perform.topic", "test");
+        String topicrange = System.getProperty("ccs.perform.topicrange", null);
         String key = System.getProperty("ccs.perform.key", "defaultkey");
         long loop_ns = 5_000_000_000L; // ns = 5s
         int iter = Integer.valueOf(System.getProperty("ccs.perform.iterate", "20"));
 
         SecureRandom rand = new SecureRandom();
 
+        TopicNameSupplier supplier = TopicNameSupplier.create(topic, topicrange);
+
         Connection nc = Nats.connect(CommonProperties.get("ccs.nats.url", "nats://localhost:4222"));
         LatencyMeasurePingSerializer serializer = new LatencyMeasurePingSerializer();
-
         try {
             int seq = 0;
             for( int i=0 ; i != iter ; i++ ) {
@@ -37,7 +40,7 @@ public class NatsProducer {
                 long et = 0;
                 while( (et = System.nanoTime()) - st < loop_ns) {
                     try {
-                        nc.publish(topic, serializer.serialize(null, new LatencyMeasurePing(seq)));
+                        nc.publish(supplier.get(), serializer.serialize(null, new LatencyMeasurePing(seq)));
                         seq++;
                         cnt++;
                     }catch(IllegalStateException e) {
@@ -57,4 +60,6 @@ public class NatsProducer {
         }
 
     }
+
+
 }
